@@ -3,6 +3,8 @@ name = "gossip-peer"
 version = "0.0.1"
 authors = ["sergey-melnychuk"]
 edition = "2018"
+description = "Distributed membership and failure detection gossip protocols implementation"
+licence = "MIT"
 
 [dependencies]
 
