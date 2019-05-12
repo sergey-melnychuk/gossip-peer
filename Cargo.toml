@@ -1,6 +1,6 @@
 [package]
 name = "gossip-peer"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["sergey-melnychuk"]
 edition = "2018"
 description = "Distributed membership and failure detection gossip protocols implementation"
@@ -10,4 +10,5 @@ homepage = "https://github.com/sergey-melnychuk/gossip-peer"
 repository = "https://github.com/sergey-melnychuk/gossip-peer"
 
 [dependencies]
+borrowed-byte-buffer = "0.1.0"
 
