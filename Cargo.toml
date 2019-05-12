@@ -1,7 +1,8 @@
 [package]
 name = "gossip-peer"
-version = "0.1.0"
-authors = ["sergey-melnychuk <sergey-melnychuk@users.noreply.github.com>"]
+version = "0.0.1"
+authors = ["sergey-melnychuk"]
 edition = "2018"
 
 [dependencies]
+
