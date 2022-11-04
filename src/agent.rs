@@ -118,12 +118,13 @@ impl Agent {
 
     fn touch(&mut self, info: &Info, time: u64) -> Option<Event> {
         if let Some(record) = self.get_mut(&info.addr) {
-            if info.beat > record.info.beat || info.beat == 0 {
+            let is_ping = info.beat == 0 && record.is_down();
+            if info.beat > record.info.beat || is_ping {
                 record.info.beat = info.beat;
                 record.time = time;
                 record.down = 0;
             }
-            if info.beat == 0 {
+            if is_ping {
                 Some(Event::Append(*record))
             } else {
                 None
