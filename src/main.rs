@@ -10,16 +10,18 @@ use agent::{Addr, Agent, Message, Record};
 fn main() {
     env_logger::init();
 
-    let ping_cutoff_millis: u64 = 500;
-    let fail_cutoff_millis: u64 = 1000;
+    let ping_interval_millis: u64 = 10000;
+
+    let ping_cutoff_millis: u64 = 1000;
+    let fail_cutoff_millis: u64 = 5000;
     let gossip_interval_millis: u64 = (ping_cutoff_millis + fail_cutoff_millis) / 5;
-    let read_timeout_millis: u64 = gossip_interval_millis / 5;
-    let ping_interval_millis: u64 = 10 * gossip_interval_millis;
 
     let args: Vec<String> = env::args().collect();
     let host: u32 = 0;
     let port: u16 = args[1].parse().unwrap();
+
     let socket = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port))).expect("bind failed");
+    let read_timeout_millis: u64 = gossip_interval_millis / 5;
     socket
         .set_read_timeout(Some(Duration::from_millis(read_timeout_millis)))
         .expect("set read timeout failed");
@@ -33,11 +35,8 @@ fn main() {
         .collect::<Vec<Addr>>();
     debug!("seeds: {:?}", seeds);
 
-    let this = Record {
-        addr: Addr { host, port },
-        beat: 0,
-        time: agent::get_current_millis(),
-    };
+    let addr = Addr { host, port };
+    let this = Record::new(addr, agent::get_current_millis());
     let ping = Message::Ping(this).bytes();
 
     let mut agent = Agent::new(this, seeds, ping_cutoff_millis, fail_cutoff_millis);
@@ -75,12 +74,14 @@ fn main() {
             info!("event: {:?}", e);
         }
 
-        if now - last_gossip_millis >= gossip_interval_millis && !agent.peers.is_empty() {
+        if now - last_gossip_millis >= gossip_interval_millis && agent.is_ready() {
             last_gossip_millis = now;
             agent.tick(now);
             for (addr, message) in agent.gossip(now) {
                 debug!("gossip for peer {:?}: {:?}", addr, message);
-                socket.send_to(&message.bytes(), &addr.addr()).expect("failed to send");
+                socket
+                    .send_to(&message.bytes(), addr.addr())
+                    .expect("failed to send");
             }
         }
 

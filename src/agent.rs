@@ -7,9 +7,25 @@ use self::borrowed_byte_buffer::{ByteBuf, ByteBufMut};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Record {
-    pub addr: Addr,
-    pub beat: u64,
-    pub time: u64,
+    addr: Addr,
+    beat: u64,
+    time: u64,
+    down: u64,
+}
+
+impl Record {
+    pub fn new(addr: Addr, time: u64) -> Self {
+        Self {
+            addr,
+            beat: 0,
+            time,
+            down: 0,
+        }
+    }
+
+    fn is_down(&self) -> bool {
+        self.down > 0
+    }
 }
 
 #[derive(Debug)]
@@ -20,11 +36,11 @@ pub enum Event {
 
 #[derive(Debug)]
 pub struct Agent {
-    pub this: Record,
-    pub seeds: Vec<Addr>,
-    pub peers: Vec<Record>,
-    pub ping_cutoff: u64,
-    pub fail_cutoff: u64,
+    this: Record,
+    seeds: Vec<Addr>,
+    peers: Vec<Record>,
+    ping_cutoff: u64,
+    fail_cutoff: u64,
 }
 
 impl Agent {
@@ -36,6 +52,10 @@ impl Agent {
             ping_cutoff,
             fail_cutoff,
         }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        !self.peers.is_empty()
     }
 
     pub fn tick(&mut self, time: u64) {
@@ -55,13 +75,15 @@ impl Agent {
     }
 
     pub fn detect(&mut self, time: u64) -> Vec<Event> {
-        let (keep, drop) = self
-            .peers
-            .iter()
-            .partition(|&rec| rec.time >= time - self.ping_cutoff - self.fail_cutoff);
-        self.peers = keep;
-
-        drop.into_iter().map(Event::Remove).collect()
+        let total_cutoff = self.ping_cutoff + self.fail_cutoff;
+        self.peers
+            .iter_mut()
+            .filter(|record| record.time >= time - total_cutoff)
+            .map(|record| {
+                record.down = time;
+                Event::Remove(*record)
+            })
+            .collect()
     }
 
     pub fn accept(&mut self, message: &Message, time: u64) -> Vec<Event> {
@@ -85,7 +107,7 @@ impl Agent {
 
     fn touch(&mut self, received: &Record, time: u64) -> Option<Event> {
         if let Some(existing) = self.get_mut(&received.addr) {
-            if received.beat > existing.beat {
+            if !existing.is_down() && received.beat > existing.beat {
                 existing.beat = received.beat;
                 existing.time = time;
             }
@@ -207,7 +229,7 @@ impl Message {
                 let host = bb.get_u32().unwrap();
                 let port = bb.get_u16().unwrap();
                 let beat = bb.get_u64().unwrap();
-                let rec = Record{ addr: Addr {host, port}, beat, time: get_current_millis() };
+                let rec = Record{ addr: Addr {host, port}, beat, time: get_current_millis(), down: 0 };
                 Some(Message::Ping(rec))
             },
             1 /* List */ => {
@@ -217,7 +239,7 @@ impl Message {
                     let host = bb.get_u32().unwrap();
                     let port = bb.get_u16().unwrap();
                     let beat = bb.get_u64().unwrap();
-                    let rec = Record{ addr: Addr {host, port}, beat, time: get_current_millis() };
+                    let rec = Record{ addr: Addr {host, port}, beat, time: get_current_millis(), down: 0 };
                     peers.push(rec);
                 }
                 Some(Message::List(peers))
