@@ -36,8 +36,8 @@ fn main() {
     debug!("seeds: {:?}", seeds);
 
     let addr = Addr { host, port };
-    let this = Record::new(addr, agent::get_current_millis());
-    let ping = Message::Ping(this).bytes();
+    let this = Record::new(addr, agent::get_current_millis(), 0);
+    let ping = Message::Ping(this.info()).bytes();
 
     let mut agent = Agent::new(this, seeds, ping_cutoff_millis, fail_cutoff_millis);
 

@@ -2,25 +2,35 @@ use std::fmt::{Debug, Error, Formatter};
 use std::net::{IpAddr, SocketAddr};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-extern crate borrowed_byte_buffer;
-use self::borrowed_byte_buffer::{ByteBuf, ByteBufMut};
+use bytes::{BytesMut, BufMut, Bytes, Buf};
 
-#[derive(Debug, Copy, Clone)]
-pub struct Record {
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Info {
     addr: Addr,
     beat: u64,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Record {
+    info: Info,
     time: u64,
     down: u64,
 }
 
 impl Record {
-    pub fn new(addr: Addr, time: u64) -> Self {
+    pub fn new(addr: Addr, time: u64, beat: u64) -> Self {
         Self {
-            addr,
-            beat: 0,
+            info: Info {
+                addr,
+                beat,
+            },
             time,
             down: 0,
         }
+    }
+
+    pub fn info(&self) -> Info {
+        self.info
     }
 
     fn is_down(&self) -> bool {
@@ -28,7 +38,7 @@ impl Record {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Event {
     Append(Record),
     Remove(Record),
@@ -59,21 +69,24 @@ impl Agent {
     }
 
     pub fn tick(&mut self, time: u64) {
-        self.this.beat += 1;
+        self.this.info.beat += 1;
         self.this.time = time;
     }
 
     pub fn ping(&self) -> Vec<&Addr> {
         self.seeds
             .iter()
-            .filter(|peer| self.peers.iter()
-                .filter(|p| !p.is_down())
-                .all(|p| &p.addr != *peer))
+            .filter(|peer| {
+                self.peers
+                    .iter()
+                    .filter(|p| !p.is_down())
+                    .all(|p| &p.info.addr != *peer)
+            })
             .collect()
     }
 
     fn get_mut(&mut self, addr: &Addr) -> Option<&mut Record> {
-        self.peers.iter_mut().find(|rec| &rec.addr == addr)
+        self.peers.iter_mut().find(|rec| &rec.info.addr == addr)
     }
 
     pub fn detect(&mut self, time: u64) -> Vec<Event> {
@@ -91,7 +104,6 @@ impl Agent {
 
     pub fn accept(&mut self, message: &Message, time: u64) -> Vec<Event> {
         let mut events = self.detect(time);
-
         match message {
             Message::Ping(peer) => {
                 if let Some(event) = self.touch(peer, time) {
@@ -104,20 +116,19 @@ impl Agent {
                     .for_each(|event| events.push(event));
             }
         }
-
         events
     }
 
-    fn touch(&mut self, received: &Record, time: u64) -> Option<Event> {
-        if let Some(existing) = self.get_mut(&received.addr) {
-            if received.beat > existing.beat {
-                existing.beat = received.beat;
-                existing.time = time;
-                existing.down = 0;
+    fn touch(&mut self, info: &Info, time: u64) -> Option<Event> {
+        if let Some(record) = self.get_mut(&info.addr) {
+            if info.beat > record.info.beat {
+                record.info.beat = info.beat;
+                record.time = time;
+                record.down = 0;
             }
             None
         } else {
-            let record = Record { time, ..*received };
+            let record = Record { info: *info, time, down: 0 };
             self.peers.push(record);
             Some(Event::Append(record))
         }
@@ -141,9 +152,10 @@ impl Agent {
                 let selected = peers
                     .clone()
                     .into_iter()
-                    .filter(|r| r.addr != record.addr)
+                    .map(|r| r.info)
+                    .filter(|info| info.addr != record.info.addr)
                     .collect();
-                (record.addr, Message::List(selected))
+                (record.info.addr, Message::List(selected))
             })
             .collect()
     }
@@ -181,22 +193,22 @@ impl From<SocketAddr> for Addr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Message {
-    Ping(Record),
-    List(Vec<Record>),
+    Ping(Info),
+    List(Vec<Info>),
 }
 
 impl Message {
     pub fn patch(&mut self, ip: Addr) {
         match self {
-            Message::Ping(peer) => {
-                peer.addr.host = ip.host;
+            Message::Ping(info) => {
+                info.addr.host = ip.host;
             }
             Message::List(list) => {
-                for peer in list {
-                    if peer.addr.host == 0 {
-                        peer.addr.host = ip.host;
+                for info in list {
+                    if info.addr.host == 0 {
+                        info.addr.host = ip.host;
                     }
                 }
             }
@@ -204,8 +216,7 @@ impl Message {
     }
 
     pub fn bytes(&self) -> Vec<u8> {
-        let mut out = vec![0u8; 128];
-        let mut buf = ByteBufMut::wrap(&mut out);
+        let mut buf = BytesMut::with_capacity(128);
         match self {
             Message::Ping(from) => {
                 buf.put_u8(MessageKind::Join as u8);
@@ -216,39 +227,40 @@ impl Message {
             Message::List(list) => {
                 buf.put_u8(MessageKind::List as u8);
                 buf.put_u32(list.len() as u32);
-                for rec in list {
-                    buf.put_u32(rec.addr.host);
-                    buf.put_u16(rec.addr.port);
-                    buf.put_u64(rec.beat);
+                for info in list {
+                    buf.put_u32(info.addr.host);
+                    buf.put_u16(info.addr.port);
+                    buf.put_u64(info.beat);
                 }
             }
         }
-        let len = buf.pos();
-        out.into_iter().take(len).collect()
+        let vec = buf.to_vec();
+        assert!(vec.len() < 128);
+        vec
     }
 
     pub fn parse(buf: &[u8]) -> Option<Message> {
-        let mut bb = ByteBuf::wrap(buf);
-        let code = bb.get_u8().unwrap();
+        let mut bb = Bytes::copy_from_slice(buf);
+        let code = bb.get_u8();
         match code {
             0 /* Ping */ => {
-                let host = bb.get_u32().unwrap();
-                let port = bb.get_u16().unwrap();
-                let beat = bb.get_u64().unwrap();
-                let rec = Record{ addr: Addr {host, port}, beat, time: get_current_millis(), down: 0 };
-                Some(Message::Ping(rec))
+                let host = bb.get_u32();
+                let port = bb.get_u16();
+                let beat = bb.get_u64();
+                let info = Info { addr: Addr {host, port}, beat };
+                Some(Message::Ping(info))
             },
             1 /* List */ => {
-                let num_peers = bb.get_u32().unwrap() as usize;
-                let mut peers = Vec::with_capacity(num_peers);
-                for _ in 0..num_peers {
-                    let host = bb.get_u32().unwrap();
-                    let port = bb.get_u16().unwrap();
-                    let beat = bb.get_u64().unwrap();
-                    let rec = Record{ addr: Addr {host, port}, beat, time: get_current_millis(), down: 0 };
-                    peers.push(rec);
+                let count = bb.get_u32() as usize;
+                let mut infos = Vec::with_capacity(count);
+                for _ in 0..count {
+                    let host = bb.get_u32();
+                    let port = bb.get_u16();
+                    let beat = bb.get_u64();
+                    let info = Info { addr: Addr {host, port}, beat };
+                    infos.push(info);
                 }
-                Some(Message::List(peers))
+                Some(Message::List(infos))
             },
             _ => None
         }
@@ -267,4 +279,54 @@ pub fn get_current_millis() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("Failed to get unix epoch time");
     epoch.as_millis() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PING_CUTOFF: u64 = 1000;
+    const FAIL_CUTOFF: u64 = 5000;
+
+    fn info(i: u8, beat: u64) -> Info {
+        Info {
+            addr: addr(i),
+            beat,
+        }
+    }
+
+    fn addr(i: u8) -> Addr {
+        Addr {
+            host: u32::from_be_bytes([i, i, i, i]),
+            port: i as u16,
+        }
+    }
+
+    fn agent(i: u8, t: u64, b: u64) -> Agent {
+        Agent::new(Record::new(addr(i), t, b), vec![], PING_CUTOFF, FAIL_CUTOFF)
+    }
+
+    #[test]
+    fn test_gossip() {
+        let mut time = 1000000000;
+
+        let mut agent = agent(1, time, 101);
+
+        let join = Message::Ping(info(2, 101));
+        assert_eq!(
+            agent.accept(&join, time),
+            vec![Event::Append(Record::new(addr(2), time, 101))]
+        );
+        assert_eq!(agent.peers, vec![Record::new(addr(2), time, 101)]);
+
+        time += PING_CUTOFF / 2;
+        assert!(agent.detect(time).is_empty());
+        assert_eq!(
+            agent.gossip(time),
+            vec![(addr(2), Message::List(vec![info(1, 101)]))]
+        );
+
+        time += PING_CUTOFF;
+        assert!(agent.gossip(time).is_empty());
+    }
 }
