@@ -66,7 +66,9 @@ impl Agent {
     pub fn ping(&self) -> Vec<&Addr> {
         self.seeds
             .iter()
-            .filter(|peer| self.peers.iter().all(|p| &p.addr != *peer))
+            .filter(|peer| self.peers.iter()
+                .filter(|p| !p.is_down())
+                .all(|p| &p.addr != *peer))
             .collect()
     }
 
