@@ -14,7 +14,7 @@ fn main() {
     let fail_cutoff_millis: u64 = 10000;
     let gossip_interval_millis: u64 = (ping_cutoff_millis + fail_cutoff_millis) / 5;
     let read_timeout_millis: u64 = gossip_interval_millis / 5;
-    let ping_interval_millis: u64 = gossip_interval_millis;
+    let ping_interval_millis: u64 = 10 * gossip_interval_millis;
 
     let args: Vec<String> = env::args().collect();
     let host: u32 = 0;
