@@ -70,18 +70,17 @@ fn main() {
             }
         }
 
+        let events = agent.detect(now);
+        for e in events {
+            info!("event: {:?}", e);
+        }
+
         if now - last_gossip_millis >= gossip_interval_millis && !agent.peers.is_empty() {
             last_gossip_millis = now;
             agent.tick(now);
             for (addr, message) in agent.gossip(now) {
                 debug!("gossip for peer {:?}: {:?}", addr, message);
                 socket.send_to(&message.bytes(), &addr.addr()).expect("failed to send");
-            }
-        } else {
-            // If there is no need to gossip, run failure detection only
-            let events = agent.detect(now);
-            for e in events {
-                info!("event: {:?}", e);
             }
         }
 
