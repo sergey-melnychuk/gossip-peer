@@ -108,9 +108,10 @@ impl Agent {
 
     fn touch(&mut self, received: &Record, time: u64) -> Option<Event> {
         if let Some(existing) = self.get_mut(&received.addr) {
-            if !existing.is_down() && received.beat > existing.beat {
+            if received.beat > existing.beat {
                 existing.beat = received.beat;
                 existing.time = time;
+                existing.down = 0;
             }
             None
         } else {
