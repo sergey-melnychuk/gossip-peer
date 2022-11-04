@@ -168,7 +168,9 @@ impl Message {
             }
             Message::List(list) => {
                 for peer in list {
-                    peer.addr.host = ip.host;
+                    if peer.addr.host == 0 {
+                        peer.addr.host = ip.host;
+                    }
                 }
             }
         }
