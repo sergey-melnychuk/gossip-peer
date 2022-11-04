@@ -38,23 +38,19 @@ impl Agent {
         }
     }
 
-    pub fn ping(&self) -> Vec<&Addr> {
-        self.seeds
-            .iter()
-            .filter(|peer| self.find(peer).is_none())
-            .collect()
-    }
-
     pub fn tick(&mut self, time: u64) {
         self.this.beat += 1;
         self.this.time = time;
     }
 
-    fn find(&self, addr: &Addr) -> Option<&Record> {
-        self.peers.iter().find(|rec| &rec.addr == addr)
+    pub fn ping(&self) -> Vec<&Addr> {
+        self.seeds
+            .iter()
+            .filter(|peer| self.peers.iter().all(|p| &p.addr != *peer))
+            .collect()
     }
 
-    fn find_mut(&mut self, addr: &Addr) -> Option<&mut Record> {
+    fn get_mut(&mut self, addr: &Addr) -> Option<&mut Record> {
         self.peers.iter_mut().find(|rec| &rec.addr == addr)
     }
 
@@ -90,7 +86,7 @@ impl Agent {
     }
 
     fn touch(&mut self, received: &Record, time: u64) -> Option<Event> {
-        if let Some(existing) = self.find_mut(&received.addr) {
+        if let Some(existing) = self.get_mut(&received.addr) {
             if received.beat > existing.beat {
                 existing.beat = received.beat;
                 existing.time = time;

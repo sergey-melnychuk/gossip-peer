@@ -84,9 +84,5 @@ fn main() {
                 info!("event: {:?}", e);
             }
         }
-
-        let sleep = gossip_interval_millis / 2 - (agent::get_current_millis() - now);
-        trace!("sleep: {} ms", sleep);
-        std::thread::sleep(Duration::from_millis(sleep));
     }
 }
