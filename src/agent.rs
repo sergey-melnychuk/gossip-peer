@@ -98,6 +98,7 @@ impl Agent {
             None
         } else {
             let record = Record { time, ..*received };
+            self.peers.push(record);
             Some(Event::Append(record))
         }
     }
