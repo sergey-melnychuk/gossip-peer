@@ -1,6 +1,6 @@
 [package]
 name = "gossip-peer"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["sergey-melnychuk"]
 edition = "2018"
 description = "Distributed membership and failure detection gossip protocols implementation"
