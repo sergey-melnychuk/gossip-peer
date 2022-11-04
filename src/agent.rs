@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Error, Formatter};
-use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::net::{IpAddr, SocketAddr};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{io, option};
 
 extern crate borrowed_byte_buffer;
 use self::borrowed_byte_buffer::{ByteBuf, ByteBufMut};
@@ -155,14 +154,6 @@ impl From<SocketAddr> for Addr {
             },
             port: addr.port(),
         }
-    }
-}
-
-impl ToSocketAddrs for Addr {
-    type Iter = option::IntoIter<SocketAddr>;
-
-    fn to_socket_addrs(&self) -> io::Result<option::IntoIter<SocketAddr>> {
-        Ok(Some(self.addr()).into_iter())
     }
 }
 

@@ -52,7 +52,7 @@ fn main() {
         if now - last_ping_millis >= ping_interval_millis {
             last_ping_millis = now;
             for addr in agent.ping() {
-                socket.send_to(&ping, addr).expect("send failed");
+                socket.send_to(&ping, addr.addr()).expect("send failed");
                 debug!("ping: {:?}", addr);
             }
         }
@@ -75,7 +75,7 @@ fn main() {
             agent.tick(now);
             for (addr, message) in agent.gossip(now) {
                 debug!("gossip for peer {:?}: {:?}", addr, message);
-                socket.send_to(&buf, &addr).expect("failed to send");
+                socket.send_to(&buf, &addr.addr()).expect("failed to send");
             }
         } else {
             // If there is no need to gossip, run failure detection only
@@ -86,6 +86,7 @@ fn main() {
         }
 
         let sleep = gossip_interval_millis - (agent::get_current_millis() - now);
+        debug!("sleep: {} ms", sleep);
         std::thread::sleep(Duration::from_millis(sleep));
     }
 }
