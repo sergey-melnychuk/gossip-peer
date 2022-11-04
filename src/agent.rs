@@ -2,7 +2,7 @@ use std::fmt::{Debug, Error, Formatter};
 use std::net::{IpAddr, SocketAddr};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bytes::{BytesMut, BufMut, Bytes, Buf};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Info {
@@ -20,10 +20,7 @@ pub struct Record {
 impl Record {
     pub fn new(addr: Addr, time: u64, beat: u64) -> Self {
         Self {
-            info: Info {
-                addr,
-                beat,
-            },
+            info: Info { addr, beat },
             time,
             down: 0,
         }
@@ -128,7 +125,11 @@ impl Agent {
             }
             None
         } else {
-            let record = Record { info: *info, time, down: 0 };
+            let record = Record {
+                info: *info,
+                time,
+                down: 0,
+            };
             self.peers.push(record);
             Some(Event::Append(record))
         }
