@@ -69,11 +69,6 @@ fn main() {
             }
         }
 
-        let events = agent.detect(now);
-        for e in events {
-            info!("event: {:?}", e);
-        }
-
         if now - last_gossip_millis >= gossip_interval_millis && agent.is_ready() {
             last_gossip_millis = now;
             agent.tick(now);
@@ -88,5 +83,10 @@ fn main() {
         let delay_millis = gossip_interval_millis - (agent::get_current_millis() - now);
         trace!("delay: {} ms", delay_millis);
         std::thread::sleep(Duration::from_millis(delay_millis));
+
+        let events = agent.detect(now);
+        for e in events {
+            info!("event: {:?}", e);
+        }
     }
 }
