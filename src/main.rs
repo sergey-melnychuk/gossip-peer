@@ -14,7 +14,7 @@ fn main() {
 
     let ping_cutoff_millis: u64 = 1000;
     let fail_cutoff_millis: u64 = 5000;
-    let gossip_interval_millis: u64 = (ping_cutoff_millis + fail_cutoff_millis) / 5;
+    let gossip_interval_millis: u64 = (ping_cutoff_millis + fail_cutoff_millis) / 10;
 
     let args: Vec<String> = env::args().collect();
     let host: u32 = 0;
