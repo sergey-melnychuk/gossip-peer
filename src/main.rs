@@ -46,6 +46,7 @@ fn main() {
     let mut buf: [u8; 1024] = [0_u8; 1024];
     loop {
         let now = agent::get_current_millis();
+        agent.tick(now);
         trace!("loop: now={}", now);
 
         if now - last_ping_millis >= ping_interval_millis {
@@ -71,7 +72,6 @@ fn main() {
 
         if now - last_gossip_millis >= gossip_interval_millis && agent.is_ready() {
             last_gossip_millis = now;
-            agent.tick(now);
             for (addr, message) in agent.gossip(now) {
                 debug!("gossip for peer {:?}: {:?}", addr, message);
                 socket

@@ -118,7 +118,7 @@ impl Agent {
 
     fn touch(&mut self, info: &Info, time: u64) -> Option<Event> {
         if let Some(record) = self.get_mut(&info.addr) {
-            if info.beat > record.info.beat {
+            if info.beat > record.info.beat || info.beat == 0 {
                 record.info.beat = info.beat;
                 record.time = time;
                 record.down = 0;
