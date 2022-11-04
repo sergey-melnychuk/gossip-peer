@@ -78,7 +78,7 @@ impl Agent {
         let total_cutoff = self.ping_cutoff + self.fail_cutoff;
         self.peers
             .iter_mut()
-            .filter(|record| record.time >= time - total_cutoff)
+            .filter(|record| record.time <= time - total_cutoff)
             .map(|record| {
                 record.down = time;
                 Event::Remove(*record)
