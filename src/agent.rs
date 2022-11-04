@@ -108,6 +108,7 @@ impl Agent {
 
         self.peers
             .iter()
+            .filter(|record| record.time > time - self.ping_cutoff)
             .map(|record| {
                 let selected = peers
                     .clone()
