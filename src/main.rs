@@ -79,7 +79,7 @@ fn main() {
             }
         }
 
-        let delay_millis = gossip_interval_millis - (agent::get_current_millis() - now);
+        let delay_millis = gossip_interval_millis / 2 - (agent::get_current_millis() - now);
         trace!("delay: {} ms", delay_millis);
         std::thread::sleep(Duration::from_millis(delay_millis));
 
