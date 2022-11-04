@@ -59,10 +59,9 @@ fn main() {
 
         if let Ok((len, from)) = socket.recv_from(&mut buf) {
             let addr: Addr = from.into();
-            debug!("received: {:?}", addr);
             if let Some(mut message) = Message::parse(&buf[0..len]) {
                 message.patch(addr);
-                debug!("message: {:?}", message);
+                debug!("message from {:?}: {:?}", addr, message);
                 let events = agent.accept(&message, now);
                 for e in events {
                     info!("event: {:?}", e);

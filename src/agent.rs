@@ -123,7 +123,11 @@ impl Agent {
                 record.time = time;
                 record.down = 0;
             }
-            None
+            if info.beat == 0 {
+                Some(Event::Append(*record))
+            } else {
+                None
+            }
         } else {
             let record = Record {
                 info: *info,
@@ -220,13 +224,13 @@ impl Message {
         let mut buf = BytesMut::with_capacity(128);
         match self {
             Message::Ping(from) => {
-                buf.put_u8(MessageKind::Join as u8);
+                buf.put_u8(0);
                 buf.put_u32(from.addr.host);
                 buf.put_u16(from.addr.port);
                 buf.put_u64(from.beat);
             }
             Message::List(list) => {
-                buf.put_u8(MessageKind::List as u8);
+                buf.put_u8(1);
                 buf.put_u32(list.len() as u32);
                 for info in list {
                     buf.put_u32(info.addr.host);
@@ -235,9 +239,7 @@ impl Message {
                 }
             }
         }
-        let vec = buf.to_vec();
-        assert!(vec.len() < 128);
-        vec
+        buf.to_vec()
     }
 
     pub fn parse(buf: &[u8]) -> Option<Message> {
@@ -266,12 +268,6 @@ impl Message {
             _ => None
         }
     }
-}
-
-#[repr(u8)]
-enum MessageKind {
-    Join = 0,
-    List,
 }
 
 pub fn get_current_millis() -> u64 {
