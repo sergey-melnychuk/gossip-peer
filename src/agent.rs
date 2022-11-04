@@ -1,13 +1,15 @@
-use std::net::SocketAddr;
-use std::fmt::{Debug, Formatter, Error};
+use std::fmt::{Debug, Error, Formatter};
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{io, option};
 
 extern crate borrowed_byte_buffer;
 use self::borrowed_byte_buffer::{ByteBuf, ByteBufMut};
 
 pub fn get_current_millis() -> u64 {
     let now = SystemTime::now();
-    let epoch = now.duration_since(UNIX_EPOCH)
+    let epoch = now
+        .duration_since(UNIX_EPOCH)
         .expect("Failed to get unix epoch time");
     epoch.as_millis() as u64
 }
@@ -18,22 +20,35 @@ pub struct Addr {
     pub port: u16,
 }
 
-impl Addr {
-    fn ip(&self) -> [u8; 4] {
-        let a = ((self.host >> 24) & 0xFF) as u8;
-        let b = ((self.host >> 16) & 0xFF) as u8;
-        let c = ((self.host >> 8) & 0xFF) as u8;
-        let d = (self.host & 0xFF) as u8;
-        [a, b, c, d]
+impl From<SocketAddr> for Addr {
+    fn from(addr: SocketAddr) -> Self {
+        Self {
+            host: match addr.ip() {
+                IpAddr::V4(ip) => ip.into(),
+                _ => panic!("IPv6 is not unsupported"),
+            },
+            port: addr.port(),
+        }
     }
-    pub fn get_socket_addr(&self) -> SocketAddr {
-        SocketAddr::from((self.ip(), self.port))
+}
+
+impl ToSocketAddrs for Addr {
+    type Iter = option::IntoIter<SocketAddr>;
+
+    fn to_socket_addrs(&self) -> io::Result<option::IntoIter<SocketAddr>> {
+        Ok(Some(self.addr()).into_iter())
+    }
+}
+
+impl Addr {
+    pub fn addr(&self) -> SocketAddr {
+        SocketAddr::from((self.host.to_be_bytes(), self.port))
     }
 }
 
 impl Debug for Addr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        let addr = format!("{}", self.get_socket_addr());
+        let addr = format!("{}", self.addr());
         f.write_str(addr.as_str()).expect("failed to format Addr");
         Ok(())
     }
@@ -50,7 +65,7 @@ impl Eq for Addr {}
 #[derive(Debug)]
 pub enum Message {
     Join(Record),
-    List(Vec<Record>)
+    List(Vec<Record>),
 }
 
 impl Message {
@@ -63,7 +78,7 @@ impl Message {
                 buf.put_u32(from.addr.host);
                 buf.put_u16(from.addr.port);
                 buf.put_u64(from.beat);
-            },
+            }
             Message::List(list) => {
                 buf.put_u8(MessageKind::List as u8);
                 buf.put_u32(list.len() as u32);
@@ -122,22 +137,35 @@ pub struct Record {
 #[derive(Debug)]
 pub struct Agent {
     pub this: Record,
+    pub seeds: Vec<Addr>,
     pub peers: Vec<Record>,
     pub handler: fn(Event),
 }
 
 pub enum Event {
     Append(Record),
-    Remove(Record)
+    Remove(Record),
 }
 
 impl Agent {
-    pub fn new(this: Record) -> Agent {
-        Agent { this, peers: vec![], handler: |_| {} }
+    pub fn new(this: Record, seeds: Vec<Addr>) -> Agent {
+        Agent {
+            this,
+            seeds,
+            peers: vec![],
+            handler: |_| {},
+        }
     }
 
     pub fn set_handler(&mut self, handler: fn(Event)) {
         self.handler = handler;
+    }
+
+    pub fn ping(&self) -> Vec<&Addr> {
+        self.seeds
+            .iter()
+            .filter(|peer| self.find(peer).is_none())
+            .collect()
     }
 
     pub fn tick(&mut self, time: u64) {
@@ -145,28 +173,35 @@ impl Agent {
         self.this.time = time;
     }
 
-    fn find(&mut self, addr: Addr) -> Option<&mut Record> {
-        for rec in &mut self.peers {
-            if rec.addr == addr {
-                return Some(rec)
-            }
-        }
-        None
+    fn find(&self, addr: &Addr) -> Option<&Record> {
+        self.peers.iter().find(|rec| &rec.addr == addr)
     }
 
-    pub fn update(&mut self, records: Vec<Record>, time: u64, ping_cutoff: u64, fail_cutoff: u64) -> Vec<Event> {
+    fn find_mut(&mut self, addr: &Addr) -> Option<&mut Record> {
+        self.peers.iter_mut().find(|rec| &rec.addr == addr)
+    }
+
+    pub fn update(
+        &mut self,
+        records: Vec<Record>,
+        time: u64,
+        ping_cutoff: u64,
+        fail_cutoff: u64,
+    ) -> Vec<Event> {
         let mut events = vec![];
-        let (keep, drop) = self.peers.iter()
+        let (keep, drop) = self
+            .peers
+            .iter()
             .partition(|&rec| rec.time >= time - ping_cutoff - fail_cutoff);
         self.peers = keep;
-        drop.into_iter()
-            .for_each(|r| events.push(Event::Remove(r)));
+        drop.into_iter().for_each(|r| events.push(Event::Remove(r)));
 
         let addr = self.this.addr;
-        records.into_iter()
+        records
+            .into_iter()
             .filter(|r| r.addr != addr)
             .for_each(|r| {
-                if let Some(present) = self.find(r.addr) {
+                if let Some(present) = self.find_mut(&r.addr) {
                     if r.beat > present.beat {
                         present.beat = r.beat;
                         present.time = time;
