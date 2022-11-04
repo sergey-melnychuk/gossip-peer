@@ -54,7 +54,7 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn bytes(&self) -> Vec<u8> {
         let mut out = vec![0u8; 128];
         let mut buf = ByteBufMut::wrap(&mut out);
         match self {
@@ -67,7 +67,7 @@ impl Message {
             Message::List(list) => {
                 buf.put_u8(MessageKind::List as u8);
                 buf.put_u32(list.len() as u32);
-                for rec in &list {
+                for rec in list {
                     buf.put_u32(rec.addr.host);
                     buf.put_u16(rec.addr.port);
                     buf.put_u64(rec.beat);
@@ -78,7 +78,7 @@ impl Message {
         out.into_iter().take(len).collect()
     }
 
-    pub fn from_bytes(buf: &[u8]) -> Option<Message> {
+    pub fn parse(buf: &[u8]) -> Option<Message> {
         let mut bb = ByteBuf::wrap(buf);
         let code = bb.get_u8().unwrap();
         match code {

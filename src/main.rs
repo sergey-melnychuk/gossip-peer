@@ -1,24 +1,20 @@
 use std::env;
-use std::net::{UdpSocket, SocketAddr};
+use std::net::{UdpSocket, SocketAddr, Ipv4Addr};
 use std::time::Duration;
+
+use log::{self, info, debug};
 
 mod agent;
 use agent::{Addr, Agent, Event, Message, Record};
 
 fn str_to_host(ip: String) -> u32 {
-    let chunks: Vec<&str> = ip.split(".").collect();
-    let a: u8 = chunks[0].parse().unwrap();
-    let b: u8 = chunks[1].parse().unwrap();
-    let c: u8 = chunks[2].parse().unwrap();
-    let d: u8 = chunks[3].parse().unwrap();
-    let mut host: u32 = a as u32;
-    host = (host << 8) + b as u32;
-    host = (host << 8) + c as u32;
-    host = (host << 8) + d as u32;
-    host
+    let ip: Ipv4Addr = ip.parse().expect("IPv4");
+    ip.into()
 }
 
 fn main() {
+    env_logger::init();
+
     let ping_cutoff_millis: u64 = 500;
     let fail_cutoff_millis: u64 = 1000;
     let gossip_interval_millis: u64 = (ping_cutoff_millis + fail_cutoff_millis) / 5;
@@ -31,39 +27,36 @@ fn main() {
         .expect("failed to bind");
     socket.set_read_timeout(Some(Duration::from_millis(read_timeout_millis)))
         .expect("fail to set read timeout");
-    println!("listening at :{}", port);
+    info!("listening at :{}", port);
 
     let this = Record { addr: Addr { host, port }, beat: 0, time: agent::get_current_millis() };
 
-    let message = Message::Join(this.clone());
-    let buf = message.into_bytes();
+    let message = Message::Join(this);
+    let buf = message.bytes();
     for arg in args.iter().skip(2) {
-        //println!("sending to {}", arg);
         socket.send_to(&buf[0..buf.len()], arg).expect("failed to send");
     }
 
     let mut agent = Agent::new(this);
     agent.set_handler(|e| {
         match e {
-            Event::Append(rec) => println!("append: {:?}", rec),
-            Event::Remove(rec) => println!("remove: {:?}", rec),
+            Event::Append(rec) => info!("append: {:?}", rec),
+            Event::Remove(rec) => info!("remove: {:?}", rec),
         }
     });
-    //println!("agent: {:?}", agent);
 
     let mut last_gossip_millis: u64 = 0;
-    let mut buf: [u8; 1024] = [0 as u8; 1024];
+    let mut buf: [u8; 1024] = [0_u8; 1024];
     loop {
         let now = agent::get_current_millis();
-        //println!("loop: now={}", now);
+        debug!("loop: now={}", now);
 
         let res = socket.recv_from(&mut buf);
-        if res.is_ok() {
-            let (_, from) = res.unwrap();
-            //println!("received from {:?}", from);
+        if let Ok((_, from)) = res {
+            debug!("received: {:?}", from);
 
-            if let Some(message) = Message::from_bytes(&buf) {
-                //println!("received message: {:?}", message);
+            if let Some(message) = Message::parse(&buf) {
+                debug!("message: {:?}", message);
                 match message {
                     Message::Join(mut peer) => {
                         peer.addr.host = str_to_host(from.ip().to_string());
@@ -87,7 +80,7 @@ fn main() {
             }
         }
 
-        if now - last_gossip_millis >= gossip_interval_millis && agent.peers.len() > 0 {
+        if now - last_gossip_millis >= gossip_interval_millis && !agent.peers.is_empty() {
             agent.tick(now);
             last_gossip_millis = now;
 
@@ -101,8 +94,8 @@ fn main() {
                     r.addr != peer.addr
                 }).collect();
                 let message = Message::List(selected);
-                let buf = message.into_bytes();
-                //println!("gossip: {:?} ({} bytes)", message, buf.len());
+                let buf = message.bytes();
+                debug!("gossip: {:?} ({} bytes)", message, buf.len());
 
                 let to: SocketAddr = peer.addr.get_socket_addr();
                 socket.send_to(&buf, to).expect("failed to send");
