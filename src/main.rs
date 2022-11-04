@@ -10,8 +10,8 @@ use agent::{Addr, Agent, Message, Record};
 fn main() {
     env_logger::init();
 
-    let ping_cutoff_millis: u64 = 5000;
-    let fail_cutoff_millis: u64 = 10000;
+    let ping_cutoff_millis: u64 = 500;
+    let fail_cutoff_millis: u64 = 1000;
     let gossip_interval_millis: u64 = (ping_cutoff_millis + fail_cutoff_millis) / 5;
     let read_timeout_millis: u64 = gossip_interval_millis / 5;
     let ping_interval_millis: u64 = 10 * gossip_interval_millis;
@@ -75,7 +75,7 @@ fn main() {
             agent.tick(now);
             for (addr, message) in agent.gossip(now) {
                 debug!("gossip for peer {:?}: {:?}", addr, message);
-                socket.send_to(&buf, &addr.addr()).expect("failed to send");
+                socket.send_to(&message.bytes(), &addr.addr()).expect("failed to send");
             }
         } else {
             // If there is no need to gossip, run failure detection only
@@ -84,5 +84,9 @@ fn main() {
                 info!("event: {:?}", e);
             }
         }
+
+        let delay_millis = gossip_interval_millis - (agent::get_current_millis() - now);
+        trace!("delay: {} ms", delay_millis);
+        std::thread::sleep(Duration::from_millis(delay_millis));
     }
 }
