@@ -78,6 +78,7 @@ impl Agent {
         let total_cutoff = self.ping_cutoff + self.fail_cutoff;
         self.peers
             .iter_mut()
+            .filter(|record| !record.is_down())
             .filter(|record| record.time <= time - total_cutoff)
             .map(|record| {
                 record.down = time;
