@@ -74,9 +74,7 @@ impl Agent {
                 }
             }
             Message::List(list) => {
-                let addr = self.this.addr;
                 list.iter()
-                    .filter(|record| record.addr != addr)
                     .filter_map(|received| self.touch(received, time))
                     .for_each(|event| events.push(event));
             }
