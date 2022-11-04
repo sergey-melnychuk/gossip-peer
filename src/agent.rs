@@ -125,12 +125,14 @@ impl Agent {
             .peers
             .clone()
             .into_iter()
+            .filter(|record| !record.is_down())
             .filter(|record| record.time > time - self.ping_cutoff)
             .collect();
         peers.push(self.this);
 
         self.peers
             .iter()
+            .filter(|record| !record.is_down())
             .filter(|record| record.time > time - self.ping_cutoff)
             .map(|record| {
                 let selected = peers
