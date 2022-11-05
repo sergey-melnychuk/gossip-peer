@@ -105,5 +105,5 @@ fn main() {
         }
     }
 
-    info!("\n\rup: {}\n\rtx: {}\n\rrx: {}", (agent::get_current_millis() - up) / 1000, tx, rx);
+    println!("\nup: {}\ntx: {}\nrx: {}", (agent::get_current_millis() - up) / 1000, tx, rx);
 }
