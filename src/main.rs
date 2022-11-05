@@ -1,5 +1,7 @@
 use std::env;
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use log::{self, debug, info, trace};
@@ -9,6 +11,9 @@ use agent::{Addr, Agent, Message, Record};
 
 fn main() {
     env_logger::init();
+    let up = agent::get_current_millis();
+    let mut tx = 0;
+    let mut rx = 0;
 
     let ping_interval_millis: u64 = 10000;
 
@@ -44,7 +49,15 @@ fn main() {
     let mut last_ping_millis: u64 = 0;
     let mut last_gossip_millis: u64 = 0;
     let mut buf: [u8; 1024] = [0_u8; 1024];
-    loop {
+
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    })
+    .expect("setting ctrl-c handler failed");
+
+    while running.load(Ordering::SeqCst) {
         let now = agent::get_current_millis();
         agent.tick(now);
         trace!("loop: now={}", now);
@@ -58,6 +71,7 @@ fn main() {
         }
 
         if let Ok((len, from)) = socket.recv_from(&mut buf) {
+            rx += len;
             let addr: Addr = from.into();
             if let Some(mut message) = Message::parse(&buf[0..len]) {
                 message.patch(addr);
@@ -73,8 +87,10 @@ fn main() {
             last_gossip_millis = now;
             for (addr, message) in agent.gossip(now) {
                 debug!("gossip for peer {:?}: {:?}", addr, message);
+                let bytes = message.bytes();
+                tx += bytes.len();
                 socket
-                    .send_to(&message.bytes(), addr.addr())
+                    .send_to(&bytes, addr.addr())
                     .expect("failed to send");
             }
         }
@@ -88,4 +104,6 @@ fn main() {
             info!("event: {:?}", e);
         }
     }
+
+    info!("\n\rup: {}\n\rtx: {}\n\rrx: {}", (agent::get_current_millis() - up) / 1000, tx, rx);
 }
